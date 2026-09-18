@@ -248,9 +248,16 @@ body {
 .builder-panel.collapsed #currentFilenameDisplay {
     display: none !important;
 }
+/* No flex-grow here. The ancestors (.main-content, .builder-container) are
+   sized by their content, not capped to the viewport, so a flex-grow on this
+   panel resolves against the roadmap's full natural height - the panel grew to
+   ~1750px, #roadmap-mount (height:100%) grew with it, its internal scroll range
+   collapsed to ~4px and the page became the scroller. The sticky timeline header
+   sticks to its nearest scrollport, so once that stopped being #roadmap-mount it
+   scrolled off with the rest of the page. The explicit height already gives the
+   preview the space freed by the collapsed builder; keep it the only sizer. */
 .builder-panel.collapsed + .preview-panel {
     height: calc(100vh - 80px);
-    flex: 1;
 }
 
 /* Drag-and-drop state for the builder panel */
