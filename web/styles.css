@@ -999,6 +999,14 @@ button.danger:hover {
     overflow: auto;
     padding: 20px;
     box-sizing: border-box;
+    /* The rendered roadmap runs its own z-index scale (stories 1, text boxes 15,
+       the sticky timeline header 20, hover states 100-300). Nothing here is a
+       stacking context by itself, so those values used to compete with the
+       preview chrome that sits on top of this element - the sticky header at 20
+       painted over the fullscreen button at 10. isolate keeps that scale
+       internal, so the chrome only has to outrank this element, not the highest
+       value the roadmap happens to use. */
+    isolation: isolate;
 }
 
 #roadmap-mount .task-title.inline-editing {
