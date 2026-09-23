@@ -227,7 +227,7 @@ export class IMOViewGenerator {
                 <div class="search-suggestions">
                     <h4>Try searching for:</h4>
                     <ul>
-                        <li><strong>IMO numbers:</strong> "IMO 0043" or "0043"</li>
+                        <li><strong>CP numbers:</strong> "CP 0043" or "0043"</li>
                         <li><strong>Quarters:</strong> "Q1", "Q2", "Q3", "Q4"</li>
                         <li><strong>Months:</strong> "April", "Mar", "September"</li>
                         <li><strong>Years:</strong> "2025", "2024"</li>
@@ -526,7 +526,7 @@ export class IMOViewGenerator {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>IMO Search: ${this.escapeHtml(searchQuery)} - Cross-Team Results</title>
+                <title>CP Search: ${this.escapeHtml(searchQuery)} - Cross-Team Results</title>
                 <style>
                     body {
                         margin: 0;
@@ -745,7 +745,7 @@ export class IMOViewGenerator {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>IMO Search: ${this.escapeHtml(searchQuery)} - Cross-Team Results</title>
+                <title>CP Search: ${this.escapeHtml(searchQuery)} - Cross-Team Results</title>
                 
                 <!-- Include all required dependencies -->
                 <script src="./utilities/date-utility.js"></script>

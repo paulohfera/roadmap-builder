@@ -1213,7 +1213,7 @@ export function init(_root) {
                 const searchQuery = document.getElementById('searchInput').value.trim();
                 const priorityValue = document.getElementById('prioritySelect')?.value || '';
                 if (!searchQuery && !priorityValue) {
-                    alert('Please enter an IMO/Project ID or select a priority');
+                    alert('Please enter a CP/Project ID or select a priority');
                         return;
                     }
 
@@ -1926,8 +1926,8 @@ export function init(_root) {
                 return matches ? 'TRUE' : 'FALSE';
             });
             
-            // IMO="number" - matches IMO number
-            processedExpr = processedExpr.replace(/IMO="([^"]+)"/gi, (match, value) => {
+            // CP="number" - matches CP number (IMO="..." kept as a legacy alias)
+            processedExpr = processedExpr.replace(/\b(?:CP|IMO)="([^"]+)"/gi, (match, value) => {
                 const imo = (story.imo || '').toLowerCase();
                 return imo.includes(value.toLowerCase()) ? 'TRUE' : 'FALSE';
             });
@@ -2034,6 +2034,7 @@ export function init(_root) {
                 // Handle status names
                 const storyPriority = (story.priority || '').toLowerCase();
                 const storyImo = (story.imo || '').toString().trim().toLowerCase();
+                const hasCP = storyImo.startsWith('cp');
                 const hasIMO = storyImo.startsWith('imo');
                 const hasPriority = storyPriority.length > 0;
                 const statusMap = {
@@ -2047,6 +2048,7 @@ export function init(_root) {
                     'TransferredIn': story.isTransferredIn,
                     'TransferredOut': story.isTransferredOut,
                     // Field presence tokens
+                    'CP': hasCP,
                     'IMO': hasIMO,
                     'Priority': hasPriority,
                     // Priority value tokens (case-insensitive)
@@ -2066,8 +2068,8 @@ export function init(_root) {
                     return statusMap[statusKey] || false;
                 }
 
-                // Match whole tokens so IMO prefixes inside quoted field values stay literal.
-                if (/^IMO[^\s!&|()"]+$/i.test(token)) {
+                // Match whole tokens so CP/IMO prefixes inside quoted field values stay literal.
+                if (/^(?:CP|IMO)[^\s!&|()"]+$/i.test(token)) {
                     pos++;
                     const prefix = token.replace(/\*$/, '').toLowerCase();
                     return storyImo.startsWith(prefix);
@@ -2197,7 +2199,7 @@ export function init(_root) {
                     </div>
                     <div class="advanced-filter-help-section">
                         <strong>FIELD PRESENCE:</strong><br>
-                        <code>IMO</code> - IMO is filled &nbsp;&nbsp; <code>!IMO</code> - IMO is empty<br>
+                        <code>CP</code> - CP is filled &nbsp;&nbsp; <code>!CP</code> - CP is empty<br>
                         <code>Priority</code> - Priority is set &nbsp;&nbsp; <code>!Priority</code> - Priority is empty
                     </div>
                     <div class="advanced-filter-help-section">
@@ -2206,8 +2208,8 @@ export function init(_root) {
                     </div>
                     <div class="advanced-filter-help-section">
                         <strong>FIELD FILTERS (partial match unless noted):</strong><br>
-                        <code>IMO="0043"</code> - IMO number (partial)<br>
-                        <code>IMO1</code> or <code>IMO1*</code> - IMO starts with IMO1<br>
+                        <code>CP="0043"</code> - CP number (partial)<br>
+                        <code>CP1</code> or <code>CP1*</code> - CP starts with CP1<br>
                         <code>PRIORITY="High"</code> - Priority (exact)<br>
                         <code>TEAM="Terminal"</code> - Team name<br>
                         <code>EPIC="Core"</code> - Epic name<br>
@@ -2220,13 +2222,13 @@ export function init(_root) {
                         <strong>EXAMPLES:</strong><br>
                         <code>Done && !Timeline</code><br>
                         <code>TEAM="Terminal" && Done</code><br>
-                        <code>IMO="0043" || IMO="0044"</code><br>
-                        <code>IMO* && !IMO2*</code> - IMO IDs excluding those starting with IMO2<br>
+                        <code>CP="0043" || CP="0044"</code><br>
+                        <code>CP* && !CP2*</code> - CP IDs excluding those starting with CP2<br>
                         <code>(TEAM="A" || TEAM="B") && !Cancelled</code><br>
                         <code>COUNTRY="UK" && LEADERSHIP="John"</code><br>
-                        <code>!IMO</code> - stories without IMO<br>
+                        <code>!CP</code> - stories without CP<br>
                         <code>High && !Done</code> - High priority, not done<br>
-                        <code>!IMO && Priority</code> - no IMO but has priority
+                        <code>!CP && Priority</code> - no CP but has priority
                     </div>
                 </div>
             `;
@@ -2390,7 +2392,7 @@ export function init(_root) {
         function buildCombinedSearchLabel() {
             const parts = [];
             const imoQuery = document.getElementById('searchInput')?.value.trim();
-            if (imoQuery) parts.push(`IMO: "${imoQuery}"`);
+            if (imoQuery) parts.push(`CP: "${imoQuery}"`);
             const priority = document.getElementById('prioritySelect')?.value;
             if (priority) parts.push(`Priority: ${priority}`);
             const titleQuery = document.getElementById('titleSearchInput')?.value.trim();
