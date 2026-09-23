@@ -1021,6 +1021,7 @@ export class IMOViewGenerator {
                 bullets: processedBullets,
                 imo: String(story.imo || ''),
                 priority: String(story.priority || ''),
+                fte: story.fte,
                 countryFlags: Array.isArray(story.countryFlags) ? story.countryFlags : [],
                 isDone: Boolean(story.isDone),
                 isCancelled: Boolean(story.isCancelled),
