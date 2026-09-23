@@ -1,6 +1,7 @@
 import { RoadmapGenerator } from '../../roadmap-generator.js';
 import { IMOUtility } from '../../utilities/imo-utility.js';
 import { IMOViewGenerator } from '../../utilities/imo-view-generator.js';
+import { ConfigUtility } from '../../utilities/config-utility.js';
 import { renderCountryFlagsHTML } from '../../utilities/countries.js';
 import { directoryStore } from '../../app/directory-store.js';
 
@@ -1277,6 +1278,22 @@ export function init(_root) {
             }
         });
 
+        // Epic titles on top / title-only stories share the builder's saved
+        // preference, so both views show roadmaps the same way.
+        function handleSearchEpicTitleTopToggle() {
+            const toggle = /** @type {HTMLInputElement | null} */ (document.getElementById('search-epic-title-top-toggle'));
+            if (!toggle) return;
+            ConfigUtility.setEpicTitleTop(toggle.checked);
+            displaySearchResults(currentResults, lastSearchQuery, null, buildTeamInfoMap(lastRoadmapFiles));
+        }
+
+        function handleSearchHideStoryTextToggle() {
+            const toggle = /** @type {HTMLInputElement | null} */ (document.getElementById('search-hide-story-text-toggle'));
+            if (!toggle) return;
+            ConfigUtility.setHideStoryText(toggle.checked);
+            displaySearchResults(currentResults, lastSearchQuery, null, buildTeamInfoMap(lastRoadmapFiles));
+        }
+
         // The nav status-style toggle changes between hover bar and side text
         // box layouts; rebuild the current results so they pick up the new mode.
         document.addEventListener('roadmap-status-style-changed', () => {
@@ -1394,6 +1411,9 @@ export function init(_root) {
                 
                 // Generate roadmap HTML - use embedded mode but extract content only
                 const generator = new RoadmapGenerator(crossTeamData.roadmapYear);
+                const epicTitleTop = ConfigUtility.shouldShowEpicTitleTop();
+                const hideStoryText = ConfigUtility.shouldHideStoryText();
+                generator.displayOptions = { epicTitleTop, hideStoryText };
                 const fullRoadmapHtml = generator.generateRoadmap(crossTeamData, true, false); // embedded=true, enableEditing=false
                 
                 // Extract just the content without the wrapper and embedded CSS
@@ -1437,6 +1457,14 @@ export function init(_root) {
                                 <label class="search-results-option">
                                     <input type="checkbox" id="search-force-text-below-toggle" onchange="handleSearchForceTextBelowToggle()" ${searchTempForceTextBelow ? 'checked' : ''}>
                                     Force all text boxes below stories
+                                </label>
+                                <label class="search-results-option">
+                                    <input type="checkbox" id="search-epic-title-top-toggle" onchange="handleSearchEpicTitleTopToggle()" ${epicTitleTop ? 'checked' : ''}>
+                                    Show epic titles at the top of each epic
+                                </label>
+                                <label class="search-results-option">
+                                    <input type="checkbox" id="search-hide-story-text-toggle" onchange="handleSearchHideStoryTextToggle()" ${hideStoryText ? 'checked' : ''}>
+                                    Show only story titles (text on hover)
                                 </label>
                             </div>
                         </div>
@@ -3037,6 +3065,8 @@ if (typeof handleSearchKeyPress === 'function') window.handleSearchKeyPress = ha
 if (typeof handleTitleSearchKeyPress === 'function') window.handleTitleSearchKeyPress = handleTitleSearchKeyPress;
 if (typeof performSearch === 'function') window.performSearch = performSearch;
 if (typeof handleSearchForceTextBelowToggle === 'function') window.handleSearchForceTextBelowToggle = handleSearchForceTextBelowToggle;
+window.handleSearchEpicTitleTopToggle = handleSearchEpicTitleTopToggle;
+window.handleSearchHideStoryTextToggle = handleSearchHideStoryTextToggle;
 if (typeof displaySearchResults === 'function') window.displaySearchResults = displaySearchResults;
 if (typeof insertStatsButtonNearHeader === 'function') window.insertStatsButtonNearHeader = insertStatsButtonNearHeader;
 if (typeof cleanRoadmapHtml === 'function') window.cleanRoadmapHtml = cleanRoadmapHtml;
