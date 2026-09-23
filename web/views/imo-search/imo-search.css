@@ -515,8 +515,10 @@
     }
 }
 
+/* clip, not hidden: hidden makes this a scroll container that never scrolls,
+   and the sticky timeline header would stick to it instead of the page. */
 .results-container {
-    overflow: hidden;
+    overflow: clip;
     color: var(--text-default);
     background: var(--surface-0);
     border: 1px solid var(--border-subtle);
@@ -569,6 +571,12 @@
 .search-results-option input {
     width: auto;
     flex-shrink: 0;
+}
+
+/* The page scrolls here, not the roadmap frame as in the builder, so the
+   months header sticks just below the fixed top nav. */
+.search-roadmap .sticky-header {
+    top: var(--app-nav-height);
 }
 
 /* Same frame as the builder preview (#roadmap-mount) */
