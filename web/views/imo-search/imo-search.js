@@ -2,6 +2,7 @@ import { RoadmapGenerator } from '../../roadmap-generator.js';
 import { IMOUtility } from '../../utilities/imo-utility.js';
 import { IMOViewGenerator } from '../../utilities/imo-view-generator.js';
 import { ConfigUtility } from '../../utilities/config-utility.js';
+import { moveTeam, mergeTeamOrder } from '../../domain/team-order.js';
 import { renderCountryFlagsHTML } from '../../utilities/countries.js';
 import { directoryStore } from '../../app/directory-store.js';
 
@@ -18,6 +19,7 @@ export function init(_root) {
     const __viewReady = [];
     const __origAdd = document.addEventListener.bind(document);
     let cleanupDirectorySubscription = () => {};
+    let closeTeamOrderPopover = () => {};
     document.addEventListener = function (type, listener, opts) {
         if (type === 'DOMContentLoaded') { __viewReady.push(listener); return; }
         return __origAdd(type, listener, opts);
@@ -1267,6 +1269,196 @@ export function init(_root) {
         // Temporary variable for search results force text below (one-time action)
         let searchTempForceTextBelow = false;
         let lastSearchQuery = null;
+        let lastSearchRange = null;
+
+        // Team swimlanes can be dragged into any order. The order is a list of
+        // team names kept in this browser and applied to every search.
+        const TEAM_ORDER_KEY = 'cross-team-search-team-order';
+
+        function loadTeamOrder() {
+            try {
+                const saved = JSON.parse(localStorage.getItem(TEAM_ORDER_KEY) || '[]');
+                return Array.isArray(saved) ? saved.filter((name) => typeof name === 'string') : [];
+            } catch {
+                return [];
+            }
+        }
+
+        function saveTeamOrder(order) {
+            try {
+                if (order.length) localStorage.setItem(TEAM_ORDER_KEY, JSON.stringify(order));
+                else localStorage.removeItem(TEAM_ORDER_KEY);
+            } catch {}
+        }
+
+        function rerenderSearchResults() {
+            if (!currentResults) return;
+            displaySearchResults(currentResults, lastSearchQuery, lastSearchRange, buildTeamInfoMap(lastRoadmapFiles));
+        }
+
+        // Teams in the order the current results show them
+        let lastOrderedTeamNames = [];
+
+        function applyTeamOrder(newVisibleOrder) {
+            saveTeamOrder(mergeTeamOrder(loadTeamOrder(), newVisibleOrder));
+            rerenderSearchResults();
+        }
+
+        /**
+         * "Reorder teams" popover next to the team list in the results
+         * summary. Each change applies straight away, so the roadmap behind it
+         * reorders live. It lives on document.body because every change
+         * re-renders the results, and it re-anchors to the new link after.
+         */
+        let teamOrderPopover = null;
+
+        function escapeTeamName(name) {
+            return String(name).replace(/[&<>"']/g, (c) => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        function positionTeamOrderPopover() {
+            const link = document.getElementById('reorderTeamsLink');
+            if (!teamOrderPopover || !link) return;
+            const rect = link.getBoundingClientRect();
+            const width = teamOrderPopover.offsetWidth;
+            const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+            teamOrderPopover.style.left = `${left + window.scrollX}px`;
+            teamOrderPopover.style.top = `${rect.bottom + window.scrollY + 6}px`;
+        }
+
+        function renderTeamOrderList(focusTeam = null, focusAction = null) {
+            if (!teamOrderPopover) return;
+            const names = lastOrderedTeamNames;
+            const list = teamOrderPopover.querySelector('.team-order-list');
+            list.innerHTML = names.map((name, index) => `
+                <li class="team-order-item" draggable="true" data-team="${escapeTeamName(name)}">
+                    <span class="team-order-grip" aria-hidden="true">⠿</span>
+                    <span class="team-order-name">${escapeTeamName(name)}</span>
+                    <button type="button" class="team-order-move" data-action="up" aria-label="Move ${escapeTeamName(name)} up" ${index === 0 ? 'disabled' : ''}>↑</button>
+                    <button type="button" class="team-order-move" data-action="down" aria-label="Move ${escapeTeamName(name)} down" ${index === names.length - 1 ? 'disabled' : ''}>↓</button>
+                </li>
+            `).join('');
+            teamOrderPopover.querySelector('.team-order-reset').disabled = loadTeamOrder().length === 0;
+
+            if (focusTeam) {
+                const item = Array.from(list.children).find((li) => li.dataset.team === focusTeam);
+                const button = item?.querySelector(`[data-action="${focusAction}"]:not(:disabled)`)
+                    || item?.querySelector('.team-order-move:not(:disabled)');
+                button?.focus();
+            }
+        }
+
+        function refreshTeamOrderPopover(focusTeam, focusAction) {
+            renderTeamOrderList(focusTeam, focusAction);
+            positionTeamOrderPopover();
+        }
+
+        function toggleTeamOrderPopover() {
+            if (teamOrderPopover) { closeTeamOrderPopover(); return; }
+
+            const popover = document.createElement('div');
+            popover.className = 'team-order-popover';
+            popover.setAttribute('role', 'dialog');
+            popover.setAttribute('aria-label', 'Reorder teams');
+            popover.innerHTML = `
+                <div class="team-order-header">Drag or use the arrows to reorder teams</div>
+                <ul class="team-order-list"></ul>
+                <div class="team-order-footer">
+                    <button type="button" class="team-order-reset">Reset to A–Z</button>
+                </div>
+            `;
+            document.body.appendChild(popover);
+            teamOrderPopover = popover;
+
+            let draggedTeam = null;
+            const list = /** @type {HTMLUListElement} */ (popover.querySelector('.team-order-list'));
+            /** @returns {HTMLElement | null} */
+            const itemFrom = (event) => event.target instanceof Element ? event.target.closest('.team-order-item') : null;
+            const clearDropMarks = () => list.querySelectorAll('.team-order-item')
+                .forEach((li) => li.classList.remove('team-drop-before', 'team-drop-after'));
+            const placementFor = (li, event) => {
+                const rect = li.getBoundingClientRect();
+                return event.clientY < rect.top + rect.height / 2 ? 'before' : 'after';
+            };
+
+            list.addEventListener('click', (event) => {
+                const button = event.target instanceof Element ? event.target.closest('.team-order-move') : null;
+                if (!button) return;
+                const team = button.closest('.team-order-item')?.getAttribute('data-team');
+                const names = lastOrderedTeamNames;
+                const index = names.indexOf(team);
+                const action = button.getAttribute('data-action');
+                const target = names[action === 'up' ? index - 1 : index + 1];
+                if (!target) return;
+                applyTeamOrder(moveTeam(names, team, target, action === 'up' ? 'before' : 'after'));
+                refreshTeamOrderPopover(team, action);
+            });
+            list.addEventListener('dragstart', (event) => {
+                const li = itemFrom(event);
+                if (!li) return;
+                draggedTeam = li.dataset.team;
+                li.classList.add('team-dragging');
+                if (event.dataTransfer) {
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', draggedTeam);
+                }
+            });
+            list.addEventListener('dragover', (event) => {
+                const li = itemFrom(event);
+                if (!draggedTeam || !li || li.dataset.team === draggedTeam) return;
+                event.preventDefault();
+                clearDropMarks();
+                li.classList.add(placementFor(li, event) === 'before' ? 'team-drop-before' : 'team-drop-after');
+            });
+            list.addEventListener('drop', (event) => {
+                const li = itemFrom(event);
+                if (!draggedTeam || !li || li.dataset.team === draggedTeam) return;
+                event.preventDefault();
+                applyTeamOrder(moveTeam(lastOrderedTeamNames, draggedTeam, li.dataset.team, placementFor(li, event)));
+                refreshTeamOrderPopover();
+            });
+            list.addEventListener('dragend', () => {
+                draggedTeam = null;
+                clearDropMarks();
+                list.querySelectorAll('.team-dragging').forEach((li) => li.classList.remove('team-dragging'));
+            });
+            popover.querySelector('.team-order-reset').addEventListener('click', () => {
+                saveTeamOrder([]);
+                rerenderSearchResults();
+                refreshTeamOrderPopover();
+            });
+
+            const onOutsideClick = (event) => {
+                if (!(event.target instanceof Element)) return;
+                if (popover.contains(event.target) || event.target.closest('#reorderTeamsLink')) return;
+                closeTeamOrderPopover();
+            };
+            const onKeyDown = (event) => {
+                if (event.key !== 'Escape') return;
+                closeTeamOrderPopover();
+                document.getElementById('reorderTeamsLink')?.focus();
+            };
+            document.addEventListener('mousedown', onOutsideClick);
+            document.addEventListener('keydown', onKeyDown);
+            window.addEventListener('resize', positionTeamOrderPopover);
+
+            closeTeamOrderPopover = () => {
+                document.removeEventListener('mousedown', onOutsideClick);
+                document.removeEventListener('keydown', onKeyDown);
+                window.removeEventListener('resize', positionTeamOrderPopover);
+                popover.remove();
+                teamOrderPopover = null;
+                document.getElementById('reorderTeamsLink')?.setAttribute('aria-expanded', 'false');
+                closeTeamOrderPopover = () => {};
+            };
+
+            document.getElementById('reorderTeamsLink')?.setAttribute('aria-expanded', 'true');
+            renderTeamOrderList();
+            positionTeamOrderPopover();
+            /** @type {HTMLElement | null} */ (popover.querySelector('.team-order-move:not(:disabled)'))?.focus();
+        }
         
         /**
          * Handle force text below toggle in search results
@@ -1365,6 +1557,7 @@ export function init(_root) {
 
                 // Update lastSearchQuery for next comparison
                 lastSearchQuery = searchQuery;
+                lastSearchRange = searchRange;
                 
                 // Sort stories by dates in ascending order (oldest first)  
                 stories.sort((a, b) => {
@@ -1407,7 +1600,10 @@ export function init(_root) {
                 });
                 
                 // Transform stories into roadmap format
-                const crossTeamData = IMOViewGenerator.transformStoriesToRoadmapData(stories, searchQuery, searchRange);
+                const crossTeamData = IMOViewGenerator.transformStoriesToRoadmapData(stories, searchQuery, searchRange, loadTeamOrder());
+                // Swimlane order, which the tooltips and drag handles match by index
+                const orderedTeamNames = crossTeamData.epics.map((epic) => epic.name);
+                lastOrderedTeamNames = orderedTeamNames;
                 
                 // Generate roadmap HTML - use embedded mode but extract content only
                 const generator = new RoadmapGenerator(crossTeamData.roadmapYear);
@@ -1424,8 +1620,7 @@ export function init(_root) {
                 const cleanedHtml = cleanRoadmapHtml(roadmapHtml);
                 
                 // Build team names with tooltips
-                const uniqueTeamNames = Array.from(new Set(stories.map(s => s.teamName))).sort();
-                const teamNamesHtml = uniqueTeamNames.map(teamName => {
+                const teamNamesHtml = orderedTeamNames.map(teamName => {
                     const teamInfo = teamInfoMap && teamInfoMap[teamName];
                     if (teamInfo) {
                         const tooltipParts = [];
@@ -1452,6 +1647,7 @@ export function init(_root) {
                                 Found <strong>${stories.length}</strong> ${stories.length === 1 ? 'story' : 'stories'} 
                                 across <strong>${new Set(stories.map(s => s.teamName)).size}</strong> ${new Set(stories.map(s => s.teamName)).size === 1 ? 'team' : 'teams'} 
                                 for "<strong>${queryLabelSafe}</strong>": (${teamNamesHtml})
+                                ${orderedTeamNames.length > 1 ? `<button type="button" class="reorder-teams-link" id="reorderTeamsLink" onclick="toggleTeamOrderPopover()" aria-haspopup="dialog" aria-expanded="false">⠿ Reorder teams</button>` : ''}
                             </div>
                             <div class="search-results-header-options">
                                 <label class="search-results-option">
@@ -1478,7 +1674,15 @@ export function init(_root) {
                 setTimeout(() => {
                     addStoryClickHandlers(stories);
                     insertStatsButtonNearHeader();
-                    attachTeamLabelTooltips(contentArea, uniqueTeamNames, teamInfoMap);
+                    attachTeamLabelTooltips(contentArea, orderedTeamNames, teamInfoMap);
+                    if (teamOrderPopover) {
+                        document.getElementById('reorderTeamsLink')?.setAttribute('aria-expanded', 'true');
+                        // A new search can bring a different set of teams.
+                        const listed = Array.from(teamOrderPopover.querySelectorAll('.team-order-item'))
+                            .map((li) => li.dataset.team);
+                        if (listed.join('\n') !== orderedTeamNames.join('\n')) renderTeamOrderList();
+                        positionTeamOrderPopover();
+                    }
                 }, 100);
                 
             } catch (error) {
@@ -3067,6 +3271,7 @@ if (typeof performSearch === 'function') window.performSearch = performSearch;
 if (typeof handleSearchForceTextBelowToggle === 'function') window.handleSearchForceTextBelowToggle = handleSearchForceTextBelowToggle;
 window.handleSearchEpicTitleTopToggle = handleSearchEpicTitleTopToggle;
 window.handleSearchHideStoryTextToggle = handleSearchHideStoryTextToggle;
+window.toggleTeamOrderPopover = toggleTeamOrderPopover;
 if (typeof displaySearchResults === 'function') window.displaySearchResults = displaySearchResults;
 if (typeof insertStatsButtonNearHeader === 'function') window.insertStatsButtonNearHeader = insertStatsButtonNearHeader;
 if (typeof cleanRoadmapHtml === 'function') window.cleanRoadmapHtml = cleanRoadmapHtml;
@@ -3110,5 +3315,8 @@ if (typeof performCountryFlagSearch === 'function') window.performCountryFlagSea
     for (const fn of __viewReady) {
         try { fn.call(document, new Event('DOMContentLoaded')); } catch (e) { console.error(e); }
     }
-    return cleanupDirectorySubscription;
+    return () => {
+        cleanupDirectorySubscription();
+        closeTeamOrderPopover();
+    };
 }

@@ -1,6 +1,7 @@
 import { RoadmapGenerator } from '../roadmap-generator.js';
 import { IMOUtility } from './imo-utility.js';
 import { UIUtility } from './ui-utility.js';
+import { orderTeamNames } from '../domain/team-order.js';
 
 export class IMOViewGenerator {
     
@@ -960,9 +961,10 @@ export class IMOViewGenerator {
      * @param {Array} stories - Search results from IMO search
      * @param {string} searchQuery - Original search query
      * @param {Object} searchRange - Optional search range with startDate and endDate for date range searches
+     * @param {string[]} teamOrder - Saved team order; teams not in it follow A-Z
      * @returns {Object} - TeamData object compatible with RoadmapGenerator
      */
-    static transformStoriesToRoadmapData(stories, searchQuery, searchRange = null) {
+    static transformStoriesToRoadmapData(stories, searchQuery, searchRange = null, teamOrder = []) {
         // Filter out any invalid stories first
         const validStories = stories.filter(story => {
             if (!story || typeof story !== 'object') {
@@ -1048,8 +1050,8 @@ export class IMOViewGenerator {
             });
         });
         
-        // Convert team groups to epics (one epic per team) - sort alphabetically
-        const epics = Object.keys(teamGroups).sort().map(teamName => {
+        // Convert team groups to epics (one epic per team) in the user's saved order
+        const epics = orderTeamNames(Object.keys(teamGroups), teamOrder).map(teamName => {
             return {
                 name: teamName,
                 stories: teamGroups[teamName]
