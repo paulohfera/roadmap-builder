@@ -1860,8 +1860,13 @@ export function init(_root) {
             // Remove any swimlane with min-height: 172px (BTL specific height)
             cleaned = cleaned.replace(/min-height:\s*172px;?/g, '');
             
-            // Remove the roadmap header to avoid duplicate headers in search results
-            cleaned = cleaned.replace(/<div class="header">[\s\S]*?<\/div>/g, '');
+            // Remove the roadmap header to avoid duplicate headers in search results.
+            // It has nested divs, so a lazy regex would stop at the first inner
+            // </div> and leave stray closing tags that end .search-roadmap early.
+            const template = document.createElement('template');
+            template.innerHTML = cleaned;
+            template.content.querySelectorAll('.header').forEach((header) => header.remove());
+            cleaned = template.innerHTML;
             
             // Remove any potential duplicate "Search Results" or similar headers
             cleaned = cleaned.replace(/<h[1-6][^>]*>.*?Search Results.*?<\/h[1-6]>/gi, '');

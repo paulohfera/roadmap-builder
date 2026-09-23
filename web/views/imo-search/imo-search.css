@@ -571,9 +571,11 @@
     flex-shrink: 0;
 }
 
+/* Same frame as the builder preview (#roadmap-mount) */
 .search-roadmap {
-    padding: 0;
+    padding: 20px;
     margin: 0;
+    background: var(--page-bg);
 }
 
 /* "Reorder teams" link in the results summary and its popover. The text
